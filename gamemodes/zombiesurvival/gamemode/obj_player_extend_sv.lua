@@ -1777,3 +1777,62 @@ function meta:BarricadeExpertPrecedence(otherpl)
 
 	return -1
 end
+
+
+-- This manages a local player list, which is propagated to all clients (in pieces)
+-- this is considerably more efficient than sending the whole list to all clients, or calling `getAll` multiple times per tick
+util.AddNetworkString("PlayerAdded")
+util.AddNetworkString("PlayerRemoved")
+
+local meta = FindMetaTable("Player")
+
+local playerInfo = {}
+
+function meta:GetList()
+	return playerInfo
+end
+
+hook.Add("PlayerInitialSpawn", "HandlePlayerJoin", function(ply)
+	local data = {
+		Nick = ply:Nick(),
+		SteamID = ply:SteamID(),
+		UserID() = ply:UserID(),
+		Team = ply:Team(),
+		Health = ply:Health(),
+		GetMaxHealth = ply:GetMaxHealth(),
+		Alive = ply:Alive(),
+	}
+	playerInfo[ply:UserID()] = data
+	net.Start("PlayerAdded")
+	net.WriteTable(data)
+	net.Broadcast()
+end)
+
+hook.Add("PlayerDisconnected", "HandlePlayerDisconnect", function(ply)
+	playerInfo[ply:UserID()] = nil
+	net.Start("PlayerRemoved")
+	net.WriteInt(ply:UserID(), 32)
+	net.Broadcast()
+end)
+
+util.AddNetworkString("RequestFullPlayerList")
+util.AddNetworkString("FullPlayerList")
+
+-- Provide complete player list on demand
+net.Receive("RequestFullPlayerList", function(len, ply)
+		net.Start("FullPlayerList")
+		net.WriteTable(playerInfo)
+		net.Send(ply)
+end)
+
+-- For cases where you need to make calls to the player's entity
+function meta:GetAllV2()
+	local playerEntityList = {}
+	for userID, _ in pairs(playerInfo) do
+			local ply = Player(userID)
+			if ply and ply:IsValid() then
+					table.insert(playerEntityList, ply)
+			end
+	end
+	return playerEntityList
+end

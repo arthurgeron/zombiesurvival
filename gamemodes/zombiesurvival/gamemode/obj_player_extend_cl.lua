@@ -247,3 +247,42 @@ net.Receive("zs_floatscore_vec", function(length)
 
 	MySelf:FloatingScore(pos, effectname, frags, flags)
 end)
+
+local clientPlayerList = {}
+
+net.Receive("PlayerAdded", function()
+		local userData = net.ReadTable()
+		
+		clientPlayerList[userData:UserID()] = userData
+end)
+
+net.Receive("PlayerRemoved", function()
+		local userID = net.ReadInt(32)
+		clientPlayerList[userID] = nil
+end)
+
+net.Receive("FullPlayerList", function()
+		clientPlayerList = net.ReadTable()
+end)
+
+-- Request full list on initial spawn
+hook.Add("InitPostEntity", "RequestFullPlayerList", function()
+		net.Start("RequestFullPlayerList")
+		net.SendToServer()
+end)
+
+function meta:GetList()
+	return clientPlayerList
+end
+
+-- For cases where you need to make calls to the player's entity
+function meta:GetAllV2()
+	local playerEntityList = {}
+	for userID, _ in pairs(clientPlayerList) do
+			local ply = Player(userID)
+			if ply and ply:IsValid() then
+					table.insert(playerEntityList, ply)
+			end
+	end
+	return playerEntityList
+end
